@@ -12,13 +12,26 @@ uploaded_file = streamlit.sidebar.file_uploader("Choose a file to start")
 
 if uploaded_file is not None:
     data_frame = pandas.read_csv(uploaded_file, sep='\t')
+
+    # Sort data frame relative to cluster names (in order to get legends sorted as they will be in the order they are added)
+    data_frame = data_frame.sort_values(by='Cluster', key=lambda col: col.map(lambda x: int(x.split('_')[1])))
+
     column_names = data_frame.columns
     vaf_columns = [name for name in column_names if (name.startswith('VAF') and not name.startswith('VAF_CCF')) ]
     pyclone_ccf_columns = [name for name in column_names if name.startswith('pyclone')]
     vaf_ccf_columns = [name for name in column_names if name.startswith('CCF')]
+    minor_cn_columns = [name for name in column_names if name.startswith('min')]
+    major_cn_columns = [name for name in column_names if name.startswith('maj')]
+    ref_counts_columns = [name for name in column_names if name.startswith('ref')]
+    alt_counts_columns = [name for name in column_names if name.startswith('alt')]
     sample_names = [name.split('_')[1] for name in vaf_columns]
 
     # Combine sample names
+
+    # Since we do not know the interrelation of samples - i.e. which is primary tumor and which is metastasis etc. we make
+    # no attempt to organize combinations in terms of which sample name is first/last in combinations. As this, however,
+    # will effect what axis each sample goes to, implement the ability to switch axes on the plots later in the script.
+
     pairwise_sample_combinations = itertools.combinations(sample_names, 2)
 
     display_combinations = {'{}_vs_{}'.format(combination[0], combination[1]): combination for combination in pairwise_sample_combinations}
@@ -26,22 +39,23 @@ if uploaded_file is not None:
 
     if number_of_plots > 1:
 
+        # Add the choice of multiplot to the samples dropdown
         display_combinations['MultiPlot'] = 'MultiPlot'
 
-        # User input
+        # User input - Which samples to plot
         sample_combination = display_combinations[streamlit.sidebar.selectbox('Please select which samples to compare', display_combinations.keys())]
     else:
         sample_combination = list(display_combinations.values())[0]
 
-    # User input
-    fraction_type = streamlit.sidebar.radio('Select data type', ('VAF', 'pyclone_CCF', 'VAF_CCF'))
+    # User input - Which data type to plot
+    data_type = streamlit.sidebar.radio('Select data type', ('VAF', 'pyclone_CCF', 'VAF_CCF'))
 
     visual_appearance = streamlit.sidebar.expander('Edit visual appearance')
 
-    # User input
+    # User input - dot size
     dot_size = visual_appearance.selectbox('Dot size...', range(5, 21), index=7)
 
-    # User input
+    # User input - display/hide dot periphery line
     display_dot_periphery_line = visual_appearance.checkbox('Toggle dot edge-lines', value=True)
 
     if display_dot_periphery_line:
@@ -57,11 +71,12 @@ if uploaded_file is not None:
             'size': dot_size,
         }
 
-    # Define ranges for axes
+    # Define ranges for axes (toggle between range for VAF plot or CCF plot)
     x_y_ranges = ([-0.05, 1.05], [-0.1, 2.1 ])
-    range_x = x_y_ranges[0] if fraction_type == 'VAF' else x_y_ranges[1]
-    range_y = x_y_ranges[0] if fraction_type == 'VAF' else x_y_ranges[1]
+    range_x = x_y_ranges[0] if data_type == 'VAF' else x_y_ranges[1]
+    range_y = x_y_ranges[0] if data_type == 'VAF' else x_y_ranges[1]
 
+    col1 = None
     # Multiplot
     if sample_combination == 'MultiPlot':
 
@@ -77,6 +92,8 @@ if uploaded_file is not None:
 
         subplot_titles = list(display_combinations.keys())[:-1]
 
+        # plot_settings = streamlit.sidebar.expander('Edit plots')
+
         h_space = inter_space / grid_columns
         v_space = inter_space / grid_rows
 
@@ -88,8 +105,8 @@ if uploaded_file is not None:
         legend_groups = set()
         for sample_combination in list(display_combinations.values())[:-1]:
 
-            # We currently have no structure to guarantee primary tumors on x axes and metastases on y
-            x_y_axes = (fraction_type + '_' + sample_combination[0], fraction_type + '_' + sample_combination[1])
+            # We currently have no structure to guarantee primary tumors on x axes and metastases on y since we
+            x_y_axes = (data_type + '_' + sample_combination[0], data_type + '_' + sample_combination[1])
 
             px_figure = px.scatter(
                 data_frame,
@@ -100,14 +117,21 @@ if uploaded_file is not None:
                 color="Cluster",
                 facet_col="Cluster",
                 hover_data={
-                    x_y_axes[0]: False,
-                    x_y_axes[1]: False,
+                    # x_y_axes[0]: False,  # Displays VAF value
+                    # x_y_axes[1]: False,
+                    'ref_counts_' + sample_combination[0]: True,
+                    'alt_counts_' + sample_combination[0]: True,
+                    'ref_counts_' + sample_combination[1]: True,
+                    'alt_counts_' + sample_combination[1]: True,
+                    'major_cn_' + sample_combination[0]: True,
+                    'minor_cn_' + sample_combination[0]: True,
+                    'major_cn_' + sample_combination[1]: True,
+                    'minor_cn_' + sample_combination[1]: True,
                     'Cluster': True,
                     "Mutation": True,
                     "Variant_Type": True,
                     'Impact': True,
                     'Gene': True,
-                    'Cluster_Assignment_Prob': True
                 },
             )
 
@@ -140,26 +164,42 @@ if uploaded_file is not None:
 
     # Single Plot
     else:
-        plot_widt = visual_appearance.slider('Plot width', min_value=200, max_value=1000, value=800, step=100)
+        # User input - plot width
+        plot_width = visual_appearance.slider('Plot width', min_value=200, max_value=1000, value=800, step=100)
+
+        # User input - Flip axes
+        flip_axes = streamlit.checkbox('Flip axes', value=False)
+        orig_sample_combination = sample_combination
+        if flip_axes:
+            sample_combination = sample_combination[::-1]
+        else:
+            sample_combination = orig_sample_combination
 
         # We currently have no structure to guarantee primary tumors on x axes and metastases on y. We could implement a manual axis flip
-        x_y_axes = (fraction_type + '_' + sample_combination[0], fraction_type + '_' + sample_combination[1])
+        x_y_axes = (data_type + '_' + sample_combination[0], data_type + '_' + sample_combination[1])
 
         figure = px.scatter(data_frame, x=x_y_axes[0], y=x_y_axes[1],
                             range_x=range_x,
                             range_y=range_y,
                             color="Cluster",
-                            width=plot_widt, height=plot_widt,
+                            width=plot_width, height=plot_width,
                             # facet_col='Sample',
                             hover_data={
-                                x_y_axes[0]: False,
-                                x_y_axes[1]: False,
+                                # x_y_axes[0]: False,
+                                # x_y_axes[1]: False,
+                                'ref_counts_' + sample_combination[0]: True,
+                                'alt_counts_' + sample_combination[0]: True,
+                                'ref_counts_' + sample_combination[1]: True,
+                                'alt_counts_' + sample_combination[1]: True,
+                                'major_cn_' + sample_combination[0]: True,
+                                'minor_cn_' + sample_combination[0]: True,
+                                'major_cn_' + sample_combination[1]: True,
+                                'minor_cn_' + sample_combination[1]: True,
                                 'Cluster': True,
                                 "Mutation": True,
                                 "Variant_Type": True,
                                 'Impact': True,
                                 'Gene': True,
-                                'Cluster_Assignment_Prob': True
                             },
                             )
 
@@ -169,5 +209,4 @@ if uploaded_file is not None:
         ).update_layout(
             hoverlabel_align='left'  # Necessary for streamlit to make text for all labels align left
         )
-
     streamlit.plotly_chart(figure, theme=None)
