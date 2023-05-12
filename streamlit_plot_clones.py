@@ -34,7 +34,7 @@ if uploaded_file is not None:
 
     pairwise_sample_combinations = itertools.combinations(sample_names, 2)
 
-    display_combinations = {'{}_vs_{}'.format(combination[0], combination[1]): combination for combination in pairwise_sample_combinations}
+    display_combinations = {'{}_vs_{}'.format(combination[0], combination[1]): list(combination) for combination in pairwise_sample_combinations}
     number_of_plots = len(display_combinations)
 
     if number_of_plots > 1:
@@ -53,10 +53,10 @@ if uploaded_file is not None:
     visual_appearance = streamlit.sidebar.expander('Edit visual appearance')
 
     # User input - dot size
-    dot_size = visual_appearance.selectbox('Dot size...', range(5, 21), index=7)
+    dot_size = visual_appearance.selectbox('Dot size...', range(5, 21), index=3)
 
     # User input - display/hide dot periphery line
-    display_dot_periphery_line = visual_appearance.checkbox('Toggle dot edge-lines', value=True)
+    display_dot_periphery_line = visual_appearance.checkbox('Toggle dot edge-lines', value=False)
 
     if display_dot_periphery_line:
         marker = {
@@ -76,7 +76,6 @@ if uploaded_file is not None:
     range_x = x_y_ranges[0] if data_type == 'VAF' else x_y_ranges[1]
     range_y = x_y_ranges[0] if data_type == 'VAF' else x_y_ranges[1]
 
-    col1 = None
     # Multiplot
     if sample_combination == 'MultiPlot':
 
@@ -92,8 +91,16 @@ if uploaded_file is not None:
 
         subplot_titles = list(display_combinations.keys())[:-1]
 
-        # plot_settings = streamlit.sidebar.expander('Edit plots')
+        # Define plot settings for axis flipping
+        plot_settings = streamlit.sidebar.expander('Edit plots')
+        plot_settings.write('Flip axes')
+        flip_combination_axes = {}
+        for title in subplot_titles:
+            flip_combination_axes[title] = plot_settings.checkbox(title, value=False, key=title)
 
+        for sample_combination in flip_combination_axes:
+            if flip_combination_axes[sample_combination]:
+                display_combinations[sample_combination] = display_combinations[sample_combination][::-1]
         h_space = inter_space / grid_columns
         v_space = inter_space / grid_rows
 
