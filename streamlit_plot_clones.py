@@ -5,10 +5,15 @@ import pandas
 import plotly_express as px
 from plotly.subplots import make_subplots
 
+__version__ = '1.5'
+
 streamlit.set_page_config(layout="wide")
 
-# User input
+# User input - File upload - starting point
 uploaded_file = streamlit.sidebar.file_uploader("Choose a file to start")
+
+# Define colors to use for cluster colors
+cluster_colors = ["#989794", "#813D86", "#F6EA4C", "#FD973C", "#FF3C2F", "#04ff00", "#997b1a", "#870e0e", "#9a05f7", "#509690", "#6f85f2", "#fc0303", "#fc03b6", "#8a3a01", "#fa6c07", "#c4a7a7", "#fcfc03", "#fa6161", "#025750", "#7a5e04", "#66024a", "#ad73d1", "#01188c", "#032dff", "#c5cefc", "#fab9b9", "#fc954c", "#1e5e1e", "#703d62", "#acfcf6", "#fcc203", "#a6f7a6", "#e6c2fc", "#00fcec", "#4d1570", "#694125", "#016b01"]
 
 if uploaded_file is not None:
     data_frame = pandas.read_csv(uploaded_file, sep='\t')
@@ -46,6 +51,12 @@ if uploaded_file is not None:
         sample_combination = display_combinations[streamlit.sidebar.selectbox('Please select which samples to compare', display_combinations.keys())]
     else:
         sample_combination = list(display_combinations.values())[0]
+
+    # Data filtering
+    data_filtering = streamlit.sidebar.expander('Data filters')
+
+    # User input
+    min_vaf = data_filtering.slider('Minimal MAF', min_value=0.0, max_value=1.0, value=0.0, step=0.01)
 
     # User input - Which data type to plot
     data_type = streamlit.sidebar.radio('Select data type', ('VAF', 'pyclone_CCF', 'VAF_CCF'))
@@ -122,6 +133,7 @@ if uploaded_file is not None:
                 range_x=range_x,
                 range_y=range_y,
                 color="Cluster",
+                color_discrete_sequence=cluster_colors,
                 facet_col="Cluster",
                 hover_data={
                     # x_y_axes[0]: False,  # Displays VAF value
@@ -189,6 +201,7 @@ if uploaded_file is not None:
                             range_x=range_x,
                             range_y=range_y,
                             color="Cluster",
+                            color_discrete_sequence=cluster_colors,
                             width=plot_width, height=plot_width,
                             # facet_col='Sample',
                             hover_data={
